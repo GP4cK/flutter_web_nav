@@ -1,6 +1,6 @@
+import 'dart:html';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import 'first_left_pane.dart';
 
 void main() {
@@ -36,24 +36,51 @@ class _NestedRouterDemoState extends State<NestedRouterDemo> {
 enum AppSection { projects, templates, people }
 
 class AppState extends ChangeNotifier {
-  AppSection _currentAppSection;
+  final List<AppRoutePath> _history;
 
-  String _selectedProjectID;
+  AppState() : _history = [ProjectsListPath()];
 
-  AppState() : _currentAppSection = AppSection.projects;
+  void popPage() {
+    if (_history.isNotEmpty) {
+      _history.removeLast();
+      notifyListeners();
+    }
+  }
 
-  AppSection get appSection => _currentAppSection;
-
-  set appSection(AppSection section) {
-    _currentAppSection = section;
+  void replace(AppRoutePath page) {
+    final index = _history.indexWhere((h) => h.key == page.key);
+    if (index == -1) {
+      _history
+        ..removeLast()
+        ..add(page);
+    } else {
+      _history.removeRange(index + 1, _history.length);
+    }
     notifyListeners();
   }
 
-  String get selectedProjectID => _selectedProjectID;
-
-  set selectedProjectID(String projectID) {
-    _selectedProjectID = projectID;
+  void push(AppRoutePath page) {
+    _history.add(page);
     notifyListeners();
+  }
+
+  AppRoutePath get currentPage => _history.last;
+
+  void popUntil(AppRoutePath configuration) {
+    for (var i = _history.length - 1; i >= 0; i--) {
+      final page = _history[i];
+      if (page.key != configuration.key) {
+        _history.removeLast();
+      } else {
+        break;
+      }
+    }
+    if (_history.isEmpty) _history.add(ProjectsListPath());
+    notifyListeners();
+  }
+
+  bool canPop() {
+    return _history.length > 1;
   }
 }
 
@@ -79,6 +106,10 @@ class AppRouteInformationParser extends RouteInformationParser<AppRoutePath> {
 
   @override
   RouteInformation restoreRouteInformation(AppRoutePath configuration) {
+    // Order matters here because ProjectPath is a ProjectListPath
+    if (configuration is ProjectPath) {
+      return RouteInformation(location: '/projects/${configuration.id}');
+    }
     if (configuration is ProjectsListPath) {
       return const RouteInformation(location: '/projects');
     }
@@ -87,9 +118,6 @@ class AppRouteInformationParser extends RouteInformationParser<AppRoutePath> {
     }
     if (configuration is PeopleListPath) {
       return const RouteInformation(location: '/people');
-    }
-    if (configuration is ProjectPath) {
-      return RouteInformation(location: '/projects/${configuration.id}');
     }
     if (configuration is Page404Path) {
       return const RouteInformation(location: '/404');
@@ -110,10 +138,7 @@ class TopRouterDelegate extends RouterDelegate<AppRoutePath> with ChangeNotifier
 
   @override
   AppRoutePath get currentConfiguration {
-    if (appState.appSection == AppSection.templates) return TemplateListPath();
-    if (appState.appSection == AppSection.people) return PeopleListPath();
-    if (appState.selectedProjectID == null) return ProjectsListPath();
-    return ProjectPath(appState.selectedProjectID);
+    return appState.currentPage;
   }
 
   @override
@@ -141,36 +166,61 @@ class TopRouterDelegate extends RouterDelegate<AppRoutePath> with ChangeNotifier
 
   @override
   Future<void> setNewRoutePath(AppRoutePath configuration) async {
-    if (configuration is ProjectsListPath) {
-      appState
-        ..appSection = AppSection.projects
-        ..selectedProjectID = null;
-    } else if (configuration is TemplateListPath) {
-      appState.appSection = AppSection.templates;
-    } else if (configuration is PeopleListPath) {
-      appState.appSection = AppSection.people;
-    } else if (configuration is ProjectPath) {
-      appState.selectedProjectID = configuration.id;
-    }
+    appState.popUntil(configuration);
   }
 }
 
 // Routes
-abstract class AppRoutePath {}
-
-class ProjectsListPath extends AppRoutePath {}
-
-class TemplateListPath extends AppRoutePath {}
-
-class PeopleListPath extends AppRoutePath {}
-
-class ProjectPath extends AppRoutePath {
-  final String id;
-
-  ProjectPath(this.id);
+abstract class AppRoutePath {
+  String get key;
+  Widget get widget;
+  AppSection get section;
 }
 
-class Page404Path extends AppRoutePath {}
+class ProjectsListPath extends AppRoutePath {
+  @override
+  String get key => 'projects';
+  @override
+  Widget get widget => ProjectsListScreen();
+  @override
+  AppSection get section => AppSection.projects;
+}
+
+class TemplateListPath extends AppRoutePath {
+  @override
+  String get key => 'templates';
+  @override
+  Widget get widget => TemplatesListScreen();
+  @override
+  AppSection get section => AppSection.templates;
+}
+
+class PeopleListPath extends AppRoutePath {
+  @override
+  String get key => 'people';
+  @override
+  AppSection get section => AppSection.people;
+  @override
+  Widget get widget => PeopleListScreen();
+}
+
+class ProjectPath extends ProjectsListPath {
+  final String id;
+  ProjectPath(this.id);
+  @override
+  String get key => 'projects/$id';
+  @override
+  Widget get widget => ProjectScreen(projectID: id);
+}
+
+class Page404Path extends AppRoutePath {
+  @override
+  String get key => '404';
+  @override
+  AppSection get section => throw UnimplementedError();
+  @override
+  Widget get widget => Page404();
+}
 
 // Widget that contains the AdaptiveNavigationScaffold
 class AppShell extends StatefulWidget {
@@ -248,32 +298,14 @@ class InnerRouterDelegate extends RouterDelegate<AppRoutePath> with ChangeNotifi
   Widget build(BuildContext context) {
     return Navigator(
       key: navigatorKey,
-      pages: [
-        if (appState.appSection == AppSection.projects) ...[
-          FadeAnimationPage(
-            child: ProjectsListScreen(
-              onSelectProject: _onSelectProject,
-            ),
-            key: const ValueKey('ProjectsListPage'),
-          ),
-          if (appState.selectedProjectID != null)
-            MaterialPage(
-              key: ValueKey(appState.selectedProjectID),
-              child: ProjectScreen(projectID: appState.selectedProjectID),
-            ),
-        ] else if (appState.appSection == AppSection.templates)
-          FadeAnimationPage(
-            child: TemplatesScreen(),
-            key: const ValueKey('TemplatesPage'),
-          )
-        else if (appState.appSection == AppSection.people)
-          FadeAnimationPage(
-            child: PeopleScreen(),
-            key: const ValueKey('PeoplePage'),
-          ),
-      ],
+      pages: appState._history
+          .map((history) => FadeAnimationPage(
+                key: ValueKey(history.key),
+                child: history.widget,
+              ))
+          .toList(),
       onPopPage: (route, result) {
-        appState.selectedProjectID = null;
+        appState.popPage();
         notifyListeners();
         return route.didPop(result);
       },
@@ -285,11 +317,6 @@ class InnerRouterDelegate extends RouterDelegate<AppRoutePath> with ChangeNotifi
     // This is not required for inner router delegate because it does not
     // parse route
     assert(false);
-  }
-
-  void _onSelectProject(Project project) {
-    appState.selectedProjectID = project.id;
-    notifyListeners();
   }
 }
 
@@ -317,12 +344,6 @@ final projects = [Project('p0', 'Project 0'), Project('p1', 'Project 1')];
 
 // Screens
 class ProjectsListScreen extends StatelessWidget {
-  final ValueChanged<Project> onSelectProject;
-
-  ProjectsListScreen({
-    @required this.onSelectProject,
-  });
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -332,9 +353,57 @@ class ProjectsListScreen extends StatelessWidget {
           for (var project in projects)
             ListTile(
               title: Text(project.name),
-              onTap: () => onSelectProject(project),
+              onTap: () => onSelectProject(context, project),
             ),
         ],
+      ),
+    );
+  }
+
+  void onSelectProject(BuildContext context, Project project) {
+    context.read<AppState>().push(ProjectPath(project.id));
+  }
+}
+
+class TemplatesListScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text('Templates screen'),
+      ),
+    );
+  }
+}
+
+class PeopleListScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    return Scaffold(
+      body: Column(
+        children: [
+          const Center(child: Text('People screen')),
+          if (appState.canPop())
+            TextButton(
+                onPressed: () {
+                  appState.popPage();
+                },
+                child: const Text('Pop route'))
+          else
+            const Text('No route to pop')
+        ],
+      ),
+    );
+  }
+}
+
+class Page404 extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text('Not found'),
       ),
     );
   }
@@ -343,9 +412,7 @@ class ProjectsListScreen extends StatelessWidget {
 class ProjectScreen extends StatefulWidget {
   final String projectID;
 
-  ProjectScreen({
-    @required this.projectID,
-  });
+  ProjectScreen({@required this.projectID});
 
   @override
   _ProjectScreenState createState() => _ProjectScreenState();
@@ -384,41 +451,6 @@ class _ProjectScreenState extends State<ProjectScreen> {
   }
 
   void goToPeople() {
-    final appState = context.read<AppState>();
-    // ignore: cascade_invocations
-    appState.appSection = AppSection.people;
-  }
-}
-
-class TemplatesScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text('Templates screen'),
-      ),
-    );
-  }
-}
-
-class PeopleScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text('People screen'),
-      ),
-    );
-  }
-}
-
-class Page404 extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text('Not found'),
-      ),
-    );
+    context.read<AppState>().push(PeopleListPath());
   }
 }

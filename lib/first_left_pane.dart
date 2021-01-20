@@ -7,16 +7,15 @@ class FirstLeftPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentPage = appState.currentPage;
     return Drawer(
       child: Container(
         color: Colors.grey[200],
         child: ListView(
           children: [
-            ListTile(
-                title: const Text('Project'), selected: appState.appSection == AppSection.projects, onTap: () => appState.appSection = AppSection.projects),
-            ListTile(
-                title: const Text('Templates'), selected: appState.appSection == AppSection.templates, onTap: () => appState.appSection = AppSection.templates),
-            ListTile(title: const Text('People'), selected: appState.appSection == AppSection.people, onTap: () => appState.appSection = AppSection.people),
+            ListTile(title: const Text('Projects'), selected: currentPage.section == AppSection.projects, onTap: () => appState.replace(ProjectsListPath())),
+            ListTile(title: const Text('Templates'), selected: currentPage.section == AppSection.templates, onTap: () => appState.replace(TemplateListPath())),
+            ListTile(title: const Text('People'), selected: currentPage.section == AppSection.people, onTap: () => appState.replace(PeopleListPath())),
           ],
         ),
       ),
