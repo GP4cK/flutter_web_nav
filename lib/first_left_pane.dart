@@ -13,9 +13,9 @@ class FirstLeftPane extends StatelessWidget {
         color: Colors.grey[200],
         child: ListView(
           children: [
-            ListTile(title: const Text('Projects'), selected: currentPage.section == AppSection.projects, onTap: () => appState.replace(ProjectsListPath())),
-            ListTile(title: const Text('Templates'), selected: currentPage.section == AppSection.templates, onTap: () => appState.replace(TemplateListPath())),
-            ListTile(title: const Text('People'), selected: currentPage.section == AppSection.people, onTap: () => appState.replace(PeopleListPath())),
+            ListTile(title: const Text('Projects'), selected: currentPage.section == AppSection.projects, onTap: () => appState.popUntil(ProjectsListPath())),
+            ListTile(title: const Text('Templates'), selected: currentPage.section == AppSection.templates, onTap: () => appState.popUntil(TemplateListPath())),
+            ListTile(title: const Text('People'), selected: currentPage.section == AppSection.people, onTap: () => appState.popUntil(PeopleListPath())),
           ],
         ),
       ),
