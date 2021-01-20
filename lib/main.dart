@@ -75,7 +75,7 @@ class AppState extends ChangeNotifier {
         break;
       }
     }
-    if (_history.isEmpty) _history.add(ProjectsListPath());
+    if (_history.isEmpty) _history.add(configuration);
     notifyListeners();
   }
 
@@ -428,12 +428,15 @@ class _ProjectScreenState extends State<ProjectScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            FlatButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Back'),
-            ),
+            // if we access the project directly by entering a url in the address bar,
+            // we may not be able to pop the route
+            if (context.watch<AppState>().canPop())
+              FlatButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Back'),
+              ),
             Text('A project screen', style: Theme.of(context).textTheme.headline6),
             TextField(controller: ctrl),
             TextButton(onPressed: goToPeople, child: const Text('Go to people')),
