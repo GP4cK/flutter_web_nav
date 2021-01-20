@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import 'first_left_pane.dart';
 
 void main() {
   runApp(NestedRouterDemo());
 }
 
-class Book {
-  final String title;
-  final String author;
+class Project {
+  final String id;
+  final String name;
 
-  Book(this.title, this.author);
+  Project(this.id, this.name);
 }
 
 class NestedRouterDemo extends StatefulWidget {
@@ -17,173 +20,161 @@ class NestedRouterDemo extends StatefulWidget {
 }
 
 class _NestedRouterDemoState extends State<NestedRouterDemo> {
-  final _routerDelegate = BookRouterDelegate();
-  final _routeInformationParser = BookRouteInformationParser();
+  final _routerDelegate = TopRouterDelegate();
+  final _routeInformationParser = AppRouteInformationParser();
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Books App',
+      title: 'Routing Demo',
       routerDelegate: _routerDelegate,
       routeInformationParser: _routeInformationParser,
     );
   }
 }
 
-class BooksAppState extends ChangeNotifier {
-  int _selectedIndex;
+enum AppSection { projects, templates, people }
 
-  Book _selectedBook;
+class AppState extends ChangeNotifier {
+  AppSection _currentAppSection;
 
-  final List<Book> books = [
-    Book('Stranger in a Strange Land', 'Robert A. Heinlein'),
-    Book('Foundation', 'Isaac Asimov'),
-    Book('Fahrenheit 451', 'Ray Bradbury'),
-  ];
+  String _selectedProjectID;
 
-  BooksAppState() : _selectedIndex = 0;
+  AppState() : _currentAppSection = AppSection.projects;
 
-  int get selectedIndex => _selectedIndex;
+  AppSection get appSection => _currentAppSection;
 
-  set selectedIndex(int idx) {
-    _selectedIndex = idx;
-    if (_selectedIndex == 1) {
-      // Remove this line if you want to keep the selected book when navigating
-      // between "settings" and "home" which book was selected when Settings is
-      // tapped.
-      selectedBook = null;
-    }
+  set appSection(AppSection section) {
+    _currentAppSection = section;
     notifyListeners();
   }
 
-  Book get selectedBook => _selectedBook;
+  String get selectedProjectID => _selectedProjectID;
 
-  set selectedBook(Book book) {
-    _selectedBook = book;
-    notifyListeners();
-  }
-
-  int getSelectedBookById() {
-    if (!books.contains(_selectedBook)) return 0;
-    return books.indexOf(_selectedBook);
-  }
-
-  void setSelectedBookById(int id) {
-    if (id < 0 || id > books.length - 1) {
-      return;
-    }
-
-    _selectedBook = books[id];
+  set selectedProjectID(String projectID) {
+    _selectedProjectID = projectID;
     notifyListeners();
   }
 }
 
-class BookRouteInformationParser extends RouteInformationParser<BookRoutePath> {
+class AppRouteInformationParser extends RouteInformationParser<AppRoutePath> {
   @override
-  Future<BookRoutePath> parseRouteInformation(RouteInformation routeInformation) async {
+  Future<AppRoutePath> parseRouteInformation(RouteInformation routeInformation) async {
     final uri = Uri.parse(routeInformation.location);
+    if (uri.pathSegments.isEmpty) return ProjectsListPath();
 
-    if (uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'settings') {
-      return BooksSettingsPath();
-    } else {
+    if (uri.pathSegments.first == 'people') {
+      return PeopleListPath();
+    } else if (uri.pathSegments.first == 'templates') {
+      return TemplateListPath();
+    } else if (uri.pathSegments.first == 'projects') {
       if (uri.pathSegments.length >= 2) {
-        if (uri.pathSegments[0] == 'book') {
-          return BooksDetailsPath(int.tryParse(uri.pathSegments[1]));
-        }
+        return ProjectPath(uri.pathSegments[1]);
       }
-      return BooksListPath();
+      return ProjectsListPath();
     }
+
+    return Page404Path();
   }
 
   @override
-  RouteInformation restoreRouteInformation(BookRoutePath configuration) {
-    if (configuration is BooksListPath) {
-      return const RouteInformation(location: '/home');
+  RouteInformation restoreRouteInformation(AppRoutePath configuration) {
+    if (configuration is ProjectsListPath) {
+      return const RouteInformation(location: '/projects');
     }
-    if (configuration is BooksSettingsPath) {
-      return const RouteInformation(location: '/settings');
+    if (configuration is TemplateListPath) {
+      return const RouteInformation(location: '/templates');
     }
-    if (configuration is BooksDetailsPath) {
-      return RouteInformation(location: '/book/${configuration.id}');
+    if (configuration is PeopleListPath) {
+      return const RouteInformation(location: '/people');
+    }
+    if (configuration is ProjectPath) {
+      return RouteInformation(location: '/projects/${configuration.id}');
+    }
+    if (configuration is Page404Path) {
+      return const RouteInformation(location: '/404');
     }
     return null;
   }
 }
 
-class BookRouterDelegate extends RouterDelegate<BookRoutePath> with ChangeNotifier, PopNavigatorRouterDelegateMixin<BookRoutePath> {
+class TopRouterDelegate extends RouterDelegate<AppRoutePath> with ChangeNotifier, PopNavigatorRouterDelegateMixin<AppRoutePath> {
   @override
   final GlobalKey<NavigatorState> navigatorKey;
 
-  BooksAppState appState = BooksAppState();
+  AppState appState = AppState();
 
-  BookRouterDelegate() : navigatorKey = GlobalKey<NavigatorState>() {
+  TopRouterDelegate() : navigatorKey = GlobalKey<NavigatorState>() {
     appState.addListener(notifyListeners);
   }
 
   @override
-  BookRoutePath get currentConfiguration {
-    if (appState.selectedIndex == 1) {
-      return BooksSettingsPath();
-    } else if (appState.selectedBook == null) {
-      return BooksListPath();
-    } else {
-      return BooksDetailsPath(appState.getSelectedBookById());
-    }
+  AppRoutePath get currentConfiguration {
+    if (appState.appSection == AppSection.templates) return TemplateListPath();
+    if (appState.appSection == AppSection.people) return PeopleListPath();
+    if (appState.selectedProjectID == null) return ProjectsListPath();
+    return ProjectPath(appState.selectedProjectID);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Navigator(
-      key: navigatorKey,
-      pages: [
-        MaterialPage(
-          child: AppShell(appState: appState),
-        ),
-      ],
-      onPopPage: (route, result) {
-        if (!route.didPop(result)) {
-          return false;
-        }
+    return ChangeNotifierProvider.value(
+      value: appState,
+      child: Navigator(
+        key: navigatorKey,
+        pages: [
+          MaterialPage(
+            child: AppShell(appState: appState),
+          ),
+        ],
+        onPopPage: (route, result) {
+          if (!route.didPop(result)) {
+            return false;
+          }
 
-        if (appState.selectedBook != null) {
-          appState.selectedBook = null;
-        }
-        notifyListeners();
-        return true;
-      },
+          notifyListeners();
+          return true;
+        },
+      ),
     );
   }
 
   @override
-  Future<void> setNewRoutePath(BookRoutePath configuration) async {
-    if (configuration is BooksListPath) {
+  Future<void> setNewRoutePath(AppRoutePath configuration) async {
+    if (configuration is ProjectsListPath) {
       appState
-        ..selectedIndex = 0
-        ..selectedBook = null;
-    } else if (configuration is BooksSettingsPath) {
-      appState.selectedIndex = 1;
-    } else if (configuration is BooksDetailsPath) {
-      appState.setSelectedBookById(configuration.id);
+        ..appSection = AppSection.projects
+        ..selectedProjectID = null;
+    } else if (configuration is TemplateListPath) {
+      appState.appSection = AppSection.templates;
+    } else if (configuration is PeopleListPath) {
+      appState.appSection = AppSection.people;
+    } else if (configuration is ProjectPath) {
+      appState.selectedProjectID = configuration.id;
     }
   }
 }
 
 // Routes
-abstract class BookRoutePath {}
+abstract class AppRoutePath {}
 
-class BooksListPath extends BookRoutePath {}
+class ProjectsListPath extends AppRoutePath {}
 
-class BooksSettingsPath extends BookRoutePath {}
+class TemplateListPath extends AppRoutePath {}
 
-class BooksDetailsPath extends BookRoutePath {
-  final int id;
+class PeopleListPath extends AppRoutePath {}
 
-  BooksDetailsPath(this.id);
+class ProjectPath extends AppRoutePath {
+  final String id;
+
+  ProjectPath(this.id);
 }
+
+class Page404Path extends AppRoutePath {}
 
 // Widget that contains the AdaptiveNavigationScaffold
 class AppShell extends StatefulWidget {
-  final BooksAppState appState;
+  final AppState appState;
 
   AppShell({@required this.appState});
 
@@ -223,32 +214,27 @@ class _AppShellState extends State<AppShell> {
     _backButtonDispatcher.takePriority();
 
     return Scaffold(
-      drawerScrimColor: Colors.transparent,
-      appBar: AppBar(),
-      body: Router(
-        routerDelegate: _routerDelegate,
-        backButtonDispatcher: _backButtonDispatcher,
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: [
-          const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          const BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+      body: Row(
+        children: [
+          FirstLeftPane(appState),
+          Expanded(
+            child: Router(
+              routerDelegate: _routerDelegate,
+              backButtonDispatcher: _backButtonDispatcher,
+            ),
+          ),
         ],
-        currentIndex: appState.selectedIndex,
-        onTap: (newIndex) {
-          appState.selectedIndex = newIndex;
-        },
       ),
     );
   }
 }
 
-class InnerRouterDelegate extends RouterDelegate<BookRoutePath> with ChangeNotifier, PopNavigatorRouterDelegateMixin<BookRoutePath> {
+class InnerRouterDelegate extends RouterDelegate<AppRoutePath> with ChangeNotifier, PopNavigatorRouterDelegateMixin<AppRoutePath> {
   @override
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-  BooksAppState get appState => _appState;
-  BooksAppState _appState;
-  set appState(BooksAppState value) {
+  AppState get appState => _appState;
+  AppState _appState;
+  set appState(AppState value) {
     if (value == _appState) {
       return;
     }
@@ -263,27 +249,31 @@ class InnerRouterDelegate extends RouterDelegate<BookRoutePath> with ChangeNotif
     return Navigator(
       key: navigatorKey,
       pages: [
-        if (appState.selectedIndex == 0) ...[
+        if (appState.appSection == AppSection.projects) ...[
           FadeAnimationPage(
-            child: BooksListScreen(
-              books: appState.books,
-              onTapped: _handleBookTapped,
+            child: ProjectsListScreen(
+              onSelectProject: _onSelectProject,
             ),
-            key: const ValueKey('BooksListPage'),
+            key: const ValueKey('ProjectsListPage'),
           ),
-          if (appState.selectedBook != null)
+          if (appState.selectedProjectID != null)
             MaterialPage(
-              key: ValueKey(appState.selectedBook),
-              child: BookDetailsScreen(book: appState.selectedBook),
+              key: ValueKey(appState.selectedProjectID),
+              child: ProjectScreen(projectID: appState.selectedProjectID),
             ),
-        ] else
+        ] else if (appState.appSection == AppSection.templates)
           FadeAnimationPage(
-            child: SettingsScreen(),
-            key: const ValueKey('SettingsPage'),
+            child: TemplatesScreen(),
+            key: const ValueKey('TemplatesPage'),
+          )
+        else if (appState.appSection == AppSection.people)
+          FadeAnimationPage(
+            child: PeopleScreen(),
+            key: const ValueKey('PeoplePage'),
           ),
       ],
       onPopPage: (route, result) {
-        appState.selectedBook = null;
+        appState.selectedProjectID = null;
         notifyListeners();
         return route.didPop(result);
       },
@@ -291,14 +281,14 @@ class InnerRouterDelegate extends RouterDelegate<BookRoutePath> with ChangeNotif
   }
 
   @override
-  Future<void> setNewRoutePath(BookRoutePath configuration) async {
+  Future<void> setNewRoutePath(AppRoutePath configuration) async {
     // This is not required for inner router delegate because it does not
     // parse route
     assert(false);
   }
 
-  void _handleBookTapped(Book book) {
-    appState.selectedBook = book;
+  void _onSelectProject(Project project) {
+    appState.selectedProjectID = project.id;
     notifyListeners();
   }
 }
@@ -323,14 +313,14 @@ class FadeAnimationPage extends Page {
   }
 }
 
-// Screens
-class BooksListScreen extends StatelessWidget {
-  final List<Book> books;
-  final ValueChanged<Book> onTapped;
+final projects = [Project('p0', 'Project 0'), Project('p1', 'Project 1')];
 
-  BooksListScreen({
-    @required this.books,
-    @required this.onTapped,
+// Screens
+class ProjectsListScreen extends StatelessWidget {
+  final ValueChanged<Project> onSelectProject;
+
+  ProjectsListScreen({
+    @required this.onSelectProject,
   });
 
   @override
@@ -338,25 +328,31 @@ class BooksListScreen extends StatelessWidget {
     return Scaffold(
       body: ListView(
         children: [
-          for (var book in books)
+          const TextField(),
+          for (var project in projects)
             ListTile(
-              title: Text(book.title),
-              subtitle: Text(book.author),
-              onTap: () => onTapped(book),
-            )
+              title: Text(project.name),
+              onTap: () => onSelectProject(project),
+            ),
         ],
       ),
     );
   }
 }
 
-class BookDetailsScreen extends StatelessWidget {
-  final Book book;
+class ProjectScreen extends StatefulWidget {
+  final String projectID;
 
-  BookDetailsScreen({
-    @required this.book,
+  ProjectScreen({
+    @required this.projectID,
   });
 
+  @override
+  _ProjectScreenState createState() => _ProjectScreenState();
+}
+
+class _ProjectScreenState extends State<ProjectScreen> {
+  final ctrl = TextEditingController();
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -371,23 +367,57 @@ class BookDetailsScreen extends StatelessWidget {
               },
               child: const Text('Back'),
             ),
-            if (book != null) ...[
-              Text(book.title, style: Theme.of(context).textTheme.headline6),
-              Text(book.author, style: Theme.of(context).textTheme.subtitle1),
-            ],
+            Text('A project screen', style: Theme.of(context).textTheme.headline6),
+            TextField(controller: ctrl),
+            TextButton(onPressed: goToPeople, child: const Text('Go to people')),
           ],
         ),
       ),
     );
   }
+
+  @override
+  void dispose() {
+    print('Disposing txt controller ${ctrl.text}');
+    ctrl.dispose();
+    super.dispose();
+  }
+
+  void goToPeople() {
+    final appState = context.read<AppState>();
+    // ignore: cascade_invocations
+    appState.appSection = AppSection.people;
+  }
 }
 
-class SettingsScreen extends StatelessWidget {
+class TemplatesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
       body: Center(
-        child: Text('Settings screen'),
+        child: Text('Templates screen'),
+      ),
+    );
+  }
+}
+
+class PeopleScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text('People screen'),
+      ),
+    );
+  }
+}
+
+class Page404 extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text('Not found'),
       ),
     );
   }
